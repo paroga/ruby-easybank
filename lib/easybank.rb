@@ -76,8 +76,19 @@ class Easybank
         lines = [tds[3].children[0].content]
         lines << tds[3].children[2].content if tds[3].children[2]
         lines << tds[3].children[4].content if tds[3].children[4]
-        m = /^((?<text>.*) )?(?<type>[A-Z]{2})\/(?<id>\d{9})$/.match(lines[0])
+        lines << tds[3].children[6].content if tds[3].children[6]
+        lines << tds[3].children[8].content if tds[3].children[8]
 
+        lines_offset = 0
+        first_line = lines[0]
+        while lines_offset < lines.count
+          m = /^((?<text>.*) )?(?<type>[A-Z]{2})\/(?<id>\d{9})$/.match(first_line)
+          break if m
+          lines_offset += 1
+          first_line += ' ' + lines[lines_offset]
+        end
+
+        raise "Can not parse ID=#{first_line}" unless m
         return false if m[:id] == last
         next if check_only
 
@@ -93,18 +104,18 @@ class Easybank
         if m[:text]
           transaction[:text] = m[:text].strip
 
-          if lines.count > 1
-            m = /^((?<bic>[A-Z]{6}[A-Z0-9]{2}[A-Z0-9]{3}?) )?(?<iban>[A-Z]{2}\d{2}[A-Z0-9]{1,30})$/.match(lines[1])
+          if lines.count > (lines_offset+1)
+            m = /^((?<bic>[A-Z]{6}[A-Z0-9]{2}[A-Z0-9]{3}?) )?(?<iban>[A-Z]{2}\d{2}[A-Z0-9]{1,30})$/.match(lines[lines_offset+1])
             if m
               transaction[:bic] = m[:bic]
               transaction[:iban] = m[:iban]
-              transaction[:name] = lines[2]
+              transaction[:name] = lines[lines_offset+2]
             else
-              m = /^(((?<bic>[A-Z]{6}[A-Z0-9]{2}[A-Z0-9]{3}?) )?(?<iban>[A-Z]{2}\d{2}[A-Z0-9]{1,30}) )?(?<name>.*)$/.match(lines[1])
+              m = /^(((?<bic>[A-Z]{6}[A-Z0-9]{2}[A-Z0-9]{3}?) )?(?<iban>[A-Z]{2}\d{2}[A-Z0-9]{1,30}) )?(?<name>.*)$/.match(lines[lines_offset+1])
               transaction[:bic] = m[:bic]
               transaction[:iban] = m[:iban]
               transaction[:name] = m[:name]
-              transaction[:text2] = lines[2] unless lines[2].nil?
+              transaction[:text2] = lines[lines_offset+2] unless lines[lines_offset+2].nil?
             end
 
             m = /^Gutschrift \u00DCberweisung (?<reference>.*)$/.match(transaction[:text])
@@ -148,7 +159,7 @@ class Easybank
             end
           end
         else
-          transaction[:text] = lines[1].strip
+          transaction[:text] = lines[lines_offset+1].strip
         end
 
         yield transaction
